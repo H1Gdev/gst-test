@@ -51,10 +51,14 @@
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v -m fakesrc ! testfilter ! fakesink silent=TRUE
+ * gst-launch --gst-plugin-path=./src/.libs -v -m fakesrc ! testfilter silent=TRUE ! fakesink
  * ]|
  * </refsect2>
  */
+
+/// Debug
+/// https://gstreamer.freedesktop.org/documentation/plugin-development/basics/testapp.html
+/// https://gstreamer.freedesktop.org/documentation/tutorials/basic/debugging-tools.html
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
@@ -74,12 +78,15 @@ enum
   LAST_SIGNAL
 };
 
+/* properties */
 enum
 {
   PROP_0,
   PROP_SILENT
+  /* FILL ME */
 };
 
+/// Pad
 /* the capabilities of the inputs and outputs.
  *
  * describe the real formats here.
@@ -97,18 +104,25 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     );
 
 #define gst_test_filter_parent_class parent_class
+/// define Element class.
+/// based on GstElementClass(GST_TYPE_ELEMENT) class.
 G_DEFINE_TYPE (GstTestFilter, gst_test_filter, GST_TYPE_ELEMENT);
+/// parent_class global variable is declared.
 
 static void gst_test_filter_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_test_filter_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
+static GstStateChangeReturn gst_test_filter_change_state (GstElement * element, GstStateChange transition);
+
 static gboolean gst_test_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event);
 static GstFlowReturn gst_test_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf);
+static gboolean gst_test_filter_src_query (GstPad * pad, GstObject * parent, GstQuery * query);
 
 /* GObject vmethod implementations */
 
+/// initialize Element class.
 /* initialize the testfilter's class */
 static void
 gst_test_filter_class_init (GstTestFilterClass * klass)
@@ -119,25 +133,35 @@ gst_test_filter_class_init (GstTestFilterClass * klass)
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
 
+  /* define virtual function pointers */
+  /// Property
   gobject_class->set_property = gst_test_filter_set_property;
   gobject_class->get_property = gst_test_filter_get_property;
 
+  /* define properties */
   g_object_class_install_property (gobject_class, PROP_SILENT,
       g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
           FALSE, G_PARAM_READWRITE));
 
+  /// set Element details.
   gst_element_class_set_details_simple(gstelement_class,
     "TestFilter",
     "FIXME:Generic",
     "FIXME:Generic Template Element",
     " <<user@hostname.org>>");
 
+  /// set State handler.
+  gstelement_class->change_state = gst_test_filter_change_state;
+
+  /// register Source Pad.
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&src_factory));
+  /// register Sink Pad.
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_factory));
 }
 
+/// initialize Element.
 /* initialize the new element
  * instantiate pads and add them to element
  * set pad calback functions
@@ -146,18 +170,33 @@ gst_test_filter_class_init (GstTestFilterClass * klass)
 static void
 gst_test_filter_init (GstTestFilter * filter)
 {
+  /// create Sink Pad.
+  /* pad through which data comes in to the element */
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
+  /* pads are configured here with gst_pad_set_*_function () */
+  /// set Event function.
   gst_pad_set_event_function (filter->sinkpad,
                               GST_DEBUG_FUNCPTR(gst_test_filter_sink_event));
+  /// set Chain function.
+  /* configure chain function on the pad before adding the pad to the element */
   gst_pad_set_chain_function (filter->sinkpad,
                               GST_DEBUG_FUNCPTR(gst_test_filter_chain));
   GST_PAD_SET_PROXY_CAPS (filter->sinkpad);
+  /// add Sink Pad.
   gst_element_add_pad (GST_ELEMENT (filter), filter->sinkpad);
 
+  /// create Source Pad.
+  /* pad through which data goes out of the element */
   filter->srcpad = gst_pad_new_from_static_template (&src_factory, "src");
+  /* pads are configured here with gst_pad_set_*_function () */
+  /// set Query function.
+  gst_pad_set_query_function (filter->srcpad,
+                              GST_DEBUG_FUNCPTR(gst_test_filter_src_query));
   GST_PAD_SET_PROXY_CAPS (filter->srcpad);
+  /// add Source Pad.
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
+  /* properties initial value */
   filter->silent = FALSE;
 }
 
@@ -193,8 +232,52 @@ gst_test_filter_get_property (GObject * object, guint prop_id,
   }
 }
 
+static GstStateChangeReturn
+gst_test_filter_change_state (GstElement * element, GstStateChange transition)
+{
+  GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
+  GstTestFilter *filter = GST_TESTFILTER (element);
+
+  /// Upwards(NULL->READY->PAUSED->PLAYING)
+  switch (transition) {
+    case GST_STATE_CHANGE_NULL_TO_READY:
+    case GST_STATE_CHANGE_READY_TO_PAUSED:
+    case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+      break;
+    case GST_STATE_CHANGE_READY_TO_READY:
+    case GST_STATE_CHANGE_PAUSED_TO_PAUSED:
+    case GST_STATE_CHANGE_PLAYING_TO_PLAYING:
+      break;
+    default:
+      break;
+  }
+
+  ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+  if (ret == GST_STATE_CHANGE_FAILURE)
+    return ret;
+
+  /// Downwards(NULL<-READY<-PAUSED<-PLAYING)
+  switch (transition) {
+    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+    case GST_STATE_CHANGE_PAUSED_TO_READY:
+    case GST_STATE_CHANGE_READY_TO_NULL:
+      break;
+    case GST_STATE_CHANGE_PAUSED_TO_PAUSED:
+    case GST_STATE_CHANGE_READY_TO_READY:
+    case GST_STATE_CHANGE_NULL_TO_NULL:
+      break;
+    default:
+      break;
+  }
+
+  return ret;
+}
+
+
 /* GstElement vmethod implementations */
 
+/// Event function
+/// Event(Control)
 /* this function handles sink events */
 static gboolean
 gst_test_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
@@ -207,8 +290,10 @@ gst_test_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
   GST_LOG_OBJECT (filter, "Received %s event: %" GST_PTR_FORMAT,
       GST_EVENT_TYPE_NAME (event), event);
 
+  /// GstEventType
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CAPS:
+    /* we should handle the format here */
     {
       GstCaps * caps;
 
@@ -219,13 +304,18 @@ gst_test_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       ret = gst_pad_event_default (pad, parent, event);
       break;
     }
+    case GST_EVENT_EOS:
+    /* end-of-stream, we should close down all stream leftovers here */
     default:
+      /* just call the default handler */
       ret = gst_pad_event_default (pad, parent, event);
       break;
   }
   return ret;
 }
 
+/// Chain function
+/// Buffer(Content)
 /* chain function
  * this function does the actual processing
  */
@@ -243,7 +333,35 @@ gst_test_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   return gst_pad_push (filter->srcpad, buf);
 }
 
+/// Query function (for source)
+static gboolean
+gst_test_filter_src_query (GstPad * pad, GstObject * parent, GstQuery * query)
+{
+  GstTestFilter *filter;
+  gboolean ret = FALSE;
 
+  filter = GST_TESTFILTER (parent);
+
+  switch (GST_QUERY_TYPE (query)) {
+    case GST_QUERY_POSITION:
+      /* we should report the current position */
+      break;
+    case GST_QUERY_DURATION:
+      /* we should report the duration here */
+      break;
+    case GST_QUERY_CAPS:
+      /* we should report the supported caps here */
+      break;
+    default:
+      /* just call the default handler */
+      ret = gst_pad_query_default (pad, parent, query);
+      break;
+  }
+  return ret;
+}
+
+
+/// initialize Plugin.
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
  * register the element factories and other features
@@ -258,6 +376,7 @@ testfilter_init (GstPlugin * testfilter)
   GST_DEBUG_CATEGORY_INIT (gst_test_filter_debug, "testfilter",
       0, "Template testfilter");
 
+  /// register Element.
   return gst_element_register (testfilter, "testfilter", GST_RANK_NONE,
       GST_TYPE_TESTFILTER);
 }
@@ -268,9 +387,11 @@ testfilter_init (GstPlugin * testfilter)
  * compile this code. GST_PLUGIN_DEFINE needs PACKAGE to be defined.
  */
 #ifndef PACKAGE
-#define PACKAGE "myfirsttestfilter"
+#define PACKAGE "myfirstplugin"
 #endif
 
+/// define Plugin.
+/// set Plugin informations.
 /* gstreamer looks for this structure to register testfilters
  *
  * exchange the string 'Template testfilter' with your testfilter description

@@ -65,15 +65,18 @@ G_BEGIN_DECLS
 typedef struct _GstTestFilter      GstTestFilter;
 typedef struct _GstTestFilterClass GstTestFilterClass;
 
+/// Element instance
 struct _GstTestFilter
 {
   GstElement element;
 
   GstPad *sinkpad, *srcpad;
 
+  /// Property
   gboolean silent;
 };
 
+/// Element class
 struct _GstTestFilterClass 
 {
   GstElementClass parent_class;
