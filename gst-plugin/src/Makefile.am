@@ -3,7 +3,7 @@
 ##############################################################################
 # TODO: change libgstplugin.la to something else, e.g. libmysomething.la     #
 ##############################################################################
-plugin_LTLIBRARIES = libgstplugin.la
+plugin_LTLIBRARIES = libgsttestfilter.la
 
 ##############################################################################
 # TODO: for the next set of variables, name the prefix if you named the .la, #
@@ -16,13 +16,13 @@ plugin_LTLIBRARIES = libgstplugin.la
 ## Plugin 1
 
 # sources used to compile this plug-in
-libgstplugin_la_SOURCES = gstplugin.c gstplugin.h
+libgsttestfilter_la_SOURCES = gsttestfilter.c gsttestfilter.h
 
 # compiler and linker flags used to compile this plugin, set in configure.ac
-libgstplugin_la_CFLAGS = $(GST_CFLAGS)
-libgstplugin_la_LIBADD = $(GST_LIBS)
-libgstplugin_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
-libgstplugin_la_LIBTOOLFLAGS = --tag=disable-static
+libgsttestfilter_la_CFLAGS = $(GST_CFLAGS)
+libgsttestfilter_la_LIBADD = $(GST_LIBS)
+libgsttestfilter_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+libgsttestfilter_la_LIBTOOLFLAGS = --tag=disable-static
 
 # headers we need but don't want installed
-noinst_HEADERS = gstplugin.h
+noinst_HEADERS = gsttestfilter.h
