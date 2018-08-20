@@ -109,6 +109,8 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
 G_DEFINE_TYPE (GstTestFilter, gst_test_filter, GST_TYPE_ELEMENT);
 /// parent_class global variable is declared.
 
+static void gst_test_filter_finalize (GObject * object);
+
 static void gst_test_filter_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_test_filter_get_property (GObject * object, guint prop_id,
@@ -117,6 +119,7 @@ static void gst_test_filter_get_property (GObject * object, guint prop_id,
 static GstStateChangeReturn gst_test_filter_change_state (GstElement * element, GstStateChange transition);
 
 static gboolean gst_test_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event);
+static gboolean gst_test_filter_sink_query (GstPad * pad, GstObject * parent, GstQuery * query);
 static GstFlowReturn gst_test_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf);
 static gboolean gst_test_filter_src_query (GstPad * pad, GstObject * parent, GstQuery * query);
 
@@ -127,6 +130,8 @@ static gboolean gst_test_filter_src_query (GstPad * pad, GstObject * parent, Gst
 static void
 gst_test_filter_class_init (GstTestFilterClass * klass)
 {
+  GST_LOG("%" GST_PTR_FORMAT, klass);
+
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
 
@@ -134,6 +139,7 @@ gst_test_filter_class_init (GstTestFilterClass * klass)
   gstelement_class = (GstElementClass *) klass;
 
   /* define virtual function pointers */
+  gobject_class->finalize = gst_test_filter_finalize;
   /// Property
   gobject_class->set_property = gst_test_filter_set_property;
   gobject_class->get_property = gst_test_filter_get_property;
@@ -170,6 +176,8 @@ gst_test_filter_class_init (GstTestFilterClass * klass)
 static void
 gst_test_filter_init (GstTestFilter * filter)
 {
+  GST_LOG_OBJECT(filter, " ");
+
   /// create Sink Pad.
   /* pad through which data comes in to the element */
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
@@ -177,11 +185,15 @@ gst_test_filter_init (GstTestFilter * filter)
   /// set Event function.
   gst_pad_set_event_function (filter->sinkpad,
                               GST_DEBUG_FUNCPTR(gst_test_filter_sink_event));
+  /// set Query function.
+  gst_pad_set_query_function (filter->sinkpad,
+                              GST_DEBUG_FUNCPTR(gst_test_filter_sink_query));
   /// set Chain function.
   /* configure chain function on the pad before adding the pad to the element */
   gst_pad_set_chain_function (filter->sinkpad,
                               GST_DEBUG_FUNCPTR(gst_test_filter_chain));
   GST_PAD_SET_PROXY_CAPS (filter->sinkpad);
+  GST_PAD_SET_PROXY_ALLOCATION (filter->sinkpad);
   /// add Sink Pad.
   gst_element_add_pad (GST_ELEMENT (filter), filter->sinkpad);
 
@@ -201,10 +213,22 @@ gst_test_filter_init (GstTestFilter * filter)
 }
 
 static void
+gst_test_filter_finalize (GObject * object)
+{
+  GstTestFilter *filter = GST_TESTFILTER (object);
+
+  GST_LOG_OBJECT(filter, " ");
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
+}
+
+static void
 gst_test_filter_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   GstTestFilter *filter = GST_TESTFILTER (object);
+
+  GST_LOG_OBJECT(filter, "%d", prop_id);
 
   switch (prop_id) {
     case PROP_SILENT:
@@ -222,6 +246,8 @@ gst_test_filter_get_property (GObject * object, guint prop_id,
 {
   GstTestFilter *filter = GST_TESTFILTER (object);
 
+  GST_LOG_OBJECT(filter, "%d", prop_id);
+
   switch (prop_id) {
     case PROP_SILENT:
       g_value_set_boolean (value, filter->silent);
@@ -237,6 +263,14 @@ gst_test_filter_change_state (GstElement * element, GstStateChange transition)
 {
   GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
   GstTestFilter *filter = GST_TESTFILTER (element);
+
+#if 0
+  GST_LOG_OBJECT(filter, "change: %s", gst_state_change_get_name(transition));
+#else
+  GST_LOG_OBJECT(filter, "change: %s->%s",
+      gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
+      gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
+#endif
 
   /// Upwards(NULL->READY->PAUSED->PLAYING)
   switch (transition) {
@@ -314,6 +348,27 @@ gst_test_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
   return ret;
 }
 
+/// Query function (for sink)
+static gboolean
+gst_test_filter_sink_query (GstPad * pad, GstObject * parent, GstQuery * query)
+{
+  GstTestFilter *filter;
+  gboolean ret = FALSE;
+
+  filter = GST_TESTFILTER (parent);
+
+  GST_LOG_OBJECT(filter, "%s:%s", GST_DEBUG_PAD_NAME(pad));
+
+  switch (GST_QUERY_TYPE (query)) {
+    case GST_QUERY_ALLOCATION:
+    default:
+      /* just call the default handler */
+      ret = gst_pad_query_default (pad, parent, query);
+      break;
+  }
+  return ret;
+}
+
 /// Chain function
 /// Buffer(Content)
 /* chain function
@@ -326,8 +381,49 @@ gst_test_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   filter = GST_TESTFILTER (parent);
 
-  if (filter->silent == FALSE)
-    g_print ("I'm plugged, therefore I'm in.\n");
+  GST_LOG_OBJECT(filter, "%s:%s", GST_DEBUG_PAD_NAME(pad));
+
+  if (filter->silent == FALSE) {
+    /// GstBuffer
+    g_print("Have data of size %" G_GSIZE_FORMAT " bytes!\n", gst_buffer_get_size(buf));
+    g_print("Buffer writable is %s.\n", gst_buffer_is_writable(buf) ? "TRUE" : "FALSE");
+
+    if (buf->pool) {
+      /// GstBufferPool
+      g_print("buffer belongs to GstBufferPool.\n");
+    }
+
+    {
+      /// GstMapInfo from GstBuffer.
+      GstMapInfo info;
+      gboolean result = gst_buffer_map(buf, &info, GST_MAP_READ);
+      if (result) {
+        g_print("read from GstBuffer: %c.\n", *info.data);
+        gst_buffer_unmap(buf, &info);
+      }
+    }
+
+    const guint n_memory = gst_buffer_n_memory(buf);
+    g_print("Have %u memory(max=%d).\n", n_memory, gst_buffer_get_max_memory());
+    if (n_memory > 0) {
+      /// GstMemory
+      GstMemory* mem = gst_buffer_get_memory(buf, 0);
+      gsize offset = 0;
+      gsize maxsize = 0;
+      gsize size = gst_memory_get_sizes(mem, &offset, &maxsize);
+      g_print("Memory(%u) size %" G_GSIZE_FORMAT " offset %" G_GSIZE_FORMAT " maxsize %" G_GSIZE_FORMAT ".\n", 0, size, offset, maxsize);
+
+      /// GstMapInfo from GstMemory.
+      GstMapInfo info;
+      gboolean result = gst_memory_map(mem, &info, GST_MAP_READ);
+      if (result) {
+        g_print("read from GstMemory: %c.\n", *info.data);
+        gst_memory_unmap(mem, &info);
+      }
+
+      gst_memory_unref(mem);
+    }
+  }
 
   /* just push out the incoming buffer without touching it */
   return gst_pad_push (filter->srcpad, buf);
@@ -341,6 +437,8 @@ gst_test_filter_src_query (GstPad * pad, GstObject * parent, GstQuery * query)
   gboolean ret = FALSE;
 
   filter = GST_TESTFILTER (parent);
+
+  GST_LOG_OBJECT(filter, "%s:%s", GST_DEBUG_PAD_NAME(pad));
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_POSITION:
