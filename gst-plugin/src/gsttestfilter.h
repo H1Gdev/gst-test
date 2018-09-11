@@ -84,6 +84,10 @@ struct _GstTestFilterClass
 
 GType gst_test_filter_get_type (void);
 
+#ifdef STATIC_PLUGIN
+gboolean testfilter_register_static (void);
+#endif
+
 G_END_DECLS
 
 #endif /* __GST_TESTFILTER_H__ */

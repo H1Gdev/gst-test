@@ -62,6 +62,10 @@
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
+#else
+#define PACKAGE "my-plugin-package"
+#define PACKAGE_NAME "my-plugin-package"
+#define VERSION "1.0.0"
 #endif
 
 #include <gst/gst.h>
@@ -494,6 +498,22 @@ testfilter_init (GstPlugin * testfilter)
  *
  * exchange the string 'Template testfilter' with your testfilter description
  */
+#ifdef STATIC_PLUGIN
+gboolean testfilter_register_static (void)
+{
+  return gst_plugin_register_static(
+      GST_VERSION_MAJOR,
+      GST_VERSION_MINOR,
+      G_STRINGIFY(testfilter),
+      "Template testfilter",
+      testfilter_init,
+      VERSION,
+      "LGPL",
+      PACKAGE,
+      PACKAGE_NAME,
+      "http://gstreamer.net/");
+}
+#else
 GST_PLUGIN_DEFINE (
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
@@ -502,6 +522,7 @@ GST_PLUGIN_DEFINE (
     testfilter_init,
     VERSION,
     "LGPL",
-    "GStreamer",
+    PACKAGE_NAME,
     "http://gstreamer.net/"
 )
+#endif
