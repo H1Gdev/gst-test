@@ -53,6 +53,7 @@ play_uri (const gchar * uri)
 
   g_print ("Trying to play %s ...\n", uri);
 
+  /// create Element.
   playbin = gst_element_factory_make ("playbin", "playbin");
   if (playbin == NULL)
     goto no_playbin;
@@ -64,6 +65,7 @@ play_uri (const gchar * uri)
   audiosink = gst_element_factory_make ("autoaudiosink", "audiosink");
   if (audiosink == NULL)
     goto no_autoaudiosink;
+  /// set Property.
   g_object_set (playbin, "audio-sink", audiosink, NULL);
 
   /* set video sink */
